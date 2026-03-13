@@ -1,5 +1,6 @@
 import streamlit as st
-import openai
+import groq
+from groq import Groq
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -184,8 +185,8 @@ def detect_language(text: str) -> str:
 
 
 def get_ai_response(message: str, language: str, inventory_df=None) -> str:
-    """Call OpenAI with bilingual system prompt."""
-    client = openai.OpenAI(api_key=st.session_state.api_key)
+    """Call Groq with bilingual system prompt."""
+    client = Groq(api_key=st.session_state.api_key)
 
     context = ""
     if inventory_df is not None and not inventory_df.empty:
@@ -212,7 +213,7 @@ def get_ai_response(message: str, language: str, inventory_df=None) -> str:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama-3.3-70b-versatile",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user",   "content": message},
@@ -221,10 +222,10 @@ def get_ai_response(message: str, language: str, inventory_df=None) -> str:
             temperature=0.7,
         )
         return response.choices[0].message.content
-    except openai.AuthenticationError:
+    except Exception as e:
         if language == "ar":
-            return "⚠️ خطأ في مفتاح API. تأكد من إدخال مفتاح OpenAI الصحيح في الشريط الجانبي."
-        return "⚠️ Invalid API key. Please check your OpenAI API key in the sidebar."
+            return "⚠️ خطأ في مفتاح API. تأكد من إدخال مفتاح Groq الصحيح في الشريط الجانبي."
+        return "⚠️ Invalid API key. Please check your Groq API key in the sidebar."
     except Exception as e:
         if language == "ar":
             return f"⚠️ حدث خطأ: {str(e)}"
