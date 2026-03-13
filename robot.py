@@ -627,13 +627,13 @@ with tab_alerts:
                         plan = get_ai_response(query, "en", df)
                     st.success("✅ AI Restock Plan:")
                     st.write(plan)
-                    from gtts import gTTS
+                    
                     import io
-                    tts_en =gTTS(text=plan,
-                 lang='en')
+                    tts_en =gTTS(text=plan,lang='en')
+
                     fp_en =io.BytesIO()
                     tts_en.write_to_fp(fp_en)
-                    st.audio(fp_en, format='audio/mp3')
+                    st.audio(fp_en, format='audio/mp3',autoplay=True)
 
 
         with col_btn2:
@@ -644,13 +644,10 @@ with tab_alerts:
                     products_str = "، ".join([a["product"] for a in alerts])
                     query = f"اعمل خطة إعادة تخزين لهذه المنتجات: {products_str}. اذكر الأولوية والكميات المطلوبة."
                     with st.spinner("جاري الإنشاء…"):
-                        plan = get_ai_response(query, "ar", df)
+                         plan = get_ai_response(query, "ar", df)
                     st.success("✅ خطة إعادة التخزين:")
                     st.write(plan)
-                    from gtts import gTTS
-                    import io
-                    tts_ar = gTTS(text=plan,
-            lang='ar')
+                    tts_ar = gTTS(text=plan, lang='ar')
                     fp_ar = io.BytesIO()
                     tts_ar.write_to_fp(fp_ar)
-                    st.audio(fp_ar, format='audio/mp3')
+                    st.audio(fp_ar, format='audio/mp3,autoplay=True')
