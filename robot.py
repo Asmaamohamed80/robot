@@ -1,157 +1,151 @@
+
 import streamlit as st
 import pandas as pd
-import plotly.express as px
 from groq import Groq
 from gtts import gTTS
 import io
-import smtplib
-from email.message import EmailMessage
 
 # ═══════════════════════════════════════════════════════════════
-# 1. إعدادات الصفحة والتصميم الفاخر (Premium UI)
+# 1. التصميم السينمائي (Full Screen AI Visual)
 # ═══════════════════════════════════════════════════════════════
-st.set_page_config(page_title="BilinguaBot Pro 🤖", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="BilinguaBot Pro 🤖", layout="wide")
 
-# رابط صورة الروبوت الخاصة بك
+# رابط صورتك اللي اخترتها للروبوت
 ROBOT_IMG = "https://share.google/images/JPMFf0FV1vpUGdQSG"
 
 st.markdown(f"""
 <style>
-    .stApp {{ background: #0d1117; color: #e6edf3; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
-    
-    /* تنسيق فقاعات الدردشة */
-    .user-bubble {{ 
-        background: linear-gradient(135deg, #007bff, #0056b3); 
-        color: white; padding: 15px; border-radius: 20px 20px 5px 20px; 
-        margin: 10px 0 10px 20%; text-align: right; box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+    /* جعل صورة الروبوت هي الخلفية الأساسية للشاشة بالكامل */
+    .stApp {{
+        background-image: linear-gradient(rgba(0,0,0,0.5), rgba(0,0,0,0.8)), url('{ROBOT_IMG}');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
     }}
     
-    .bot-container {{ display: flex; align-items: flex-start; margin: 15px 20% 15px 0; }}
-    .bot-avatar {{ 
-        width: 50px; height: 50px; border-radius: 50%; 
-        background-image: url('{ROBOT_IMG}'); background-size: cover; 
-        border: 2px solid #00d4ff; margin-right: 15px; flex-shrink: 0;
-        box-shadow: 0 0 10px #00d4ff;
-    }}
-    
-    .bot-bubble {{ 
-        background: #161b22; border: 1px solid #30363d; 
-        padding: 15px; border-radius: 5px 20px 20px 20px; 
-        border-left: 5px solid #00d4ff; color: #e6edf3; line-height: 1.6;
+    /* إخفاء العناصر غير الضرورية للتركيز على تجربة الروبوت */
+    [data-testid="stHeader"], [data-testid="stFooter"] {{ visibility: hidden; }}
+
+    /* صندوق الكلام (أسفل الشاشة) */
+    .chat-box {{
+        position: fixed;
+        bottom: 100px;
+        left: 5%;
+        right: 5%;
+        background: rgba(13, 17, 23, 0.9);
+        border: 2px solid #00d4ff;
+        border-radius: 15px;
+        padding: 20px;
+        z-index: 1000;
+        box-shadow: 0 0 30px rgba(0, 212, 255, 0.3);
+        direction: rtl;
     }}
 
-    /* كروت الإحصائيات */
-    .metric-card {{
-        background: rgba(22, 27, 34, 0.8); border: 1px solid #00d4ff33;
-        border-radius: 15px; padding: 25px; text-align: center;
-        transition: 0.3s;
+    .bot-text {{
+        font-size: 22px;
+        color: #00d4ff;
+        font-weight: bold;
+        margin-bottom: 5px;
     }}
-    .metric-card:hover {{ transform: translateY(-5px); border-color: #00d4ff; }}
+
+    .user-text {{
+        font-size: 16px;
+        color: #888;
+        margin-bottom: 10px;
+    }}
+
+    /* تعديل مكان خانة الكتابة لتكون تحت الصندوق مباشرة */
+    .stChatInput {{
+        position: fixed !important;
+        bottom: 30px !important;
+        left: 5% !important;
+        right: 5% !important;
+        z-index: 1001;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# 2. الدوال الذكية (AI, TTS, Email)
+# 2. عقل الروبوت (Egyptian Arabic & Data Logic)
 # ═══════════════════════════════════════════════════════════════
 
-def detect_language(text):
-    return "ar" if any('\u0600' <= c <= '\u06FF' for c in text) else "en"
-
-def speak_text(text, lang):
-    try:
-        tts = gTTS(text=text, lang=lang)
-        fp = io.BytesIO()
-        tts.write_to_fp(fp)
-        st.audio(fp, format='audio/mp3', autoplay=True)
-    except: pass
-
-def get_ai_response(message, lang, df=None):
-    if not st.session_state.get("api_key"): return "⚠️ Please add your Groq API Key in the Sidebar."
+def get_ai_response(message, df=None):
+    if not st.session_state.get("api_key"): 
+        return "يا باشا، أضف مفتاح الـ API في القائمة الجانبية عشان أقدر أرد عليك!"
+    
     client = Groq(api_key=st.session_state.api_key)
     
+    # دمج بيانات المستخدم (لو موجودة) في سياق الكلام
     context = ""
     if df is not None and not df.empty:
-        context = f"\n[Data Context]:\n{df.head(15).to_string()}\nColumns: {list(df.columns)}"
+        context = f"\n[بيانات المستخدم]:\n{df.head(10).to_string()}\n"
 
     system_msg = (
-        f"You are BilinguaBot, a professional AI Analyst. {context}\n"
-        "Respond in friendly Egyptian Arabic for 'ar', or professional English for 'en'."
+        f"You are BilinguaBot. {context}\n"
+        "Strict Rule: Always respond in Egyptian Arabic (Ammiya/لهجة مصرية عامية).\n"
+        "Be very helpful, use words like 'يا باشا', 'يا هندسة', 'من عيوني'.\n"
+        "You are an expert data analyst and a friendly companion."
     )
 
     try:
         res = client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[{"role": "system", "content": system_msg}, {"role": "user", "content": message}],
-            temperature=0.7
+            temperature=0.8
         )
         return res.choices[0].message.content
-    except Exception as e: return f"Error: {str(e)}"
+    except Exception as e:
+        return f"حصلت مشكلة بسيطة يا بطل: {str(e)}"
+
+def play_audio(text):
+    try:
+        # تحويل النص العربي لصوت (gTTS يتعرف على اللهجة من النص المكتوب)
+        tts = gTTS(text=text, lang='ar')
+        fp = io.BytesIO()
+        tts.write_to_fp(fp)
+        st.audio(fp, format='audio/mp3', autoplay=True)
+    except: pass
 
 # ═══════════════════════════════════════════════════════════════
-# 3. واجهة المستخدم والتحكم
+# 3. التشغيل وإدارة الجلسة
 # ═══════════════════════════════════════════════════════════════
-if "messages" not in st.session_state: st.session_state.messages = []
-if "inventory_df" not in st.session_state: st.session_state.inventory_df = pd.DataFrame()
+
+if "history" not in st.session_state: st.session_state.history = []
 
 with st.sidebar:
-    st.image(ROBOT_IMG, width=100)
-    st.title("Admin Panel")
-    st.session_state.api_key = st.text_input("🔑 Groq API Key", type="password")
+    st.title("⚙️ الإعدادات (Setup)")
+    st.session_state.api_key = st.text_input("Groq API Key", type="password")
     st.divider()
-    st.subheader("📧 Notifications")
-    sender = st.text_input("Sender Email")
-    password = st.text_input("App Password", type="password")
-    admin_mail = st.text_input("Admin Email")
-    st.divider()
-    uploaded = st.file_uploader("📂 Upload CSV/Excel", type=["csv", "xlsx"])
+    uploaded = st.file_uploader("ارفع ملف داتا لو حابب أحلله (CSV/Excel)", type=["csv", "xlsx"])
+    st.session_state.df = pd.DataFrame()
     if uploaded:
-        df = pd.read_csv(uploaded) if uploaded.name.endswith('.csv') else pd.read_excel(uploaded)
-        df.columns = [str(c).strip() for c in df.columns]
-        st.session_state.inventory_df = df
+        try:
+            st.session_state.df = pd.read_csv(uploaded) if uploaded.name.endswith('.csv') else pd.read_excel(uploaded)
+            st.success("الداتا جاهزة يا باشا! ✅")
+        except: st.error("في مشكلة في الملف.")
 
-tab1, tab2, tab3 = st.tabs(["💬 Chat Assistant", "📊 Smart Dashboard", "🔔 Alert System"])
+# عرض آخر محادثة في الصندوق السفلي (الشكل السينمائي)
+if st.session_state.history:
+    last = st.session_state.history[-1]
+    st.markdown(f'''
+        <div class="chat-box">
+            <div class="user-text">إنت: {last['u']}</div>
+            <div class="bot-text">الروبوت: {last['b']}</div>
+        </div>
+    ''', unsafe_allow_html=True)
+else:
+    st.markdown('''
+        <div class="chat-box">
+            <div class="bot-text">أهلاً بيك يا باشا! أنا BilinguaBot.. أؤمرني، حابب نحلل داتا ولا ندردش في أي حاجة؟</div>
+        </div>
+    ''', unsafe_allow_html=True)
 
-with tab1:
-    for m in st.session_state.messages:
-        if m["role"] == "user":
-            st.markdown(f'<div class="user-bubble">{m["content"]}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div class="bot-container"><div class="bot-avatar"></div><div class="bot-bubble">{m["content"]}</div></div>', unsafe_allow_html=True)
-
-    if prompt := st.chat_input("Ask BilinguaBot..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        st.markdown(f'<div class="user-bubble">{prompt}</div>', unsafe_allow_html=True)
-        
-        with st.spinner("Processing..."):
-            lang = detect_language(prompt)
-            reply = get_ai_response(prompt, lang, st.session_state.inventory_df)
-            st.session_state.messages.append({"role": "assistant", "content": reply})
-            st.markdown(f'<div class="bot-container"><div class="bot-avatar"></div><div class="bot-bubble">{reply}</div></div>', unsafe_allow_html=True)
-            speak_text(reply, lang)
-
-with tab2:
-    df = st.session_state.inventory_df
-    if not df.empty:
-        # حل مشكلة الرسم البياني
-        num_cols = df.select_dtypes(include=['number']).columns.tolist()
-        txt_cols = df.select_dtypes(include=['object']).columns.tolist()
-        
-        c1, c2, c3 = st.columns(3)
-        with c1: st.markdown(f'<div class="metric-card"><h4>Records</h4><h2>{len(df)}</h2></div>', unsafe_allow_html=True)
-        with c2: st.markdown(f'<div class="metric-card"><h4>Analysis</h4><h2 style="color:#00ff00;">AI Active</h2></div>', unsafe_allow_html=True)
-        with c3: 
-            val = df[num_cols[0]].sum() if num_cols else 0
-            st.markdown(f'<div class="metric-card"><h4>Sum Metric</h4><h2>{val:,.0f}</h2></div>', unsafe_allow_html=True)
-        
-        st.divider()
-        if num_cols and txt_cols:
-            fig = px.bar(df, x=txt_cols[0], y=num_cols[0], color=num_cols[0], template="plotly_dark", title="Smart Visualization")
-            st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(df, use_container_width=True)
-
-with tab3:
-    st.header("Admin Alerts")
-    alert_msg = st.text_area("Alert Details")
-    if st.button("🚀 Send Email Now"):
-        # منطق الإرسال المذكور سابقاً
-        st.info("Email Feature Ready for Setup.")
+# خانة الإدخال
+if prompt := st.chat_input("اكتب كلامك هنا يا هندسة..."):
+    # معالجة الرد
+    reply = get_ai_response(prompt, st.session_state.get('df'))
+    st.session_state.history.append({"u": prompt, "b": reply})
+    
+    # تشغيل الصوت التلقائي
+    play_audio(reply)
+    st.rerun()
