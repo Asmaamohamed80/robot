@@ -3,182 +3,336 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from datetime import datetime
+import tempfile
+import os
 
 # ═══════════════════════════════════════════════════════════════
-# BIZBOT PRO - BEAUTIFUL VERSION WITH GREAT PHOTO
+# BIZBOT PRO - WITH GROQ API + EXPRESSIONS + TALKING
 # ═══════════════════════════════════════════════════════════════
 
 st.set_page_config(
     page_title="BizBot Pro", 
     layout="wide",
-    page_icon="💫",
-    initial_sidebar_state="collapsed"
+    page_icon="🤖",
+    initial_sidebar_state="expanded"
 )
 
 # Initialize session state
 if "luna_first_message" not in st.session_state:
     st.session_state.luna_first_message = False
+if "voice_enabled" not in st.session_state:
+    st.session_state.voice_enabled = True
+if "current_language" not in st.session_state:
+    st.session_state.current_language = "English"
+if "luna_expression" not in st.session_state:
+    st.session_state.luna_expression = "happy"
+if "luna_mood" not in st.session_state:
+    st.session_state.luna_mood = "normal"
+if "groq_api_key" not in st.session_state:
+    st.session_state.groq_api_key = ""
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 # ═══════════════════════════════════════════════════════════════
-# BEAUTIFUL STYLING - MODERN DESIGN
+# GROQ API INTEGRATION
 # ═══════════════════════════════════════════════════════════════
 
-st.markdown("""
+def _safe_import(name):
+    try:
+        mod = __import__(name)
+        return mod
+    except Exception:
+        return None
+
+# Load libraries safely
+gtts = _safe_import("gtts")
+groq = _safe_import("groq")
+
+def get_ai_response(message):
+    """Get intelligent response from Groq API"""
+    if not st.session_state.groq_api_key:
+        return "Please add your Groq API key in the sidebar to chat with Luna! 💫"
+    
+    if not groq:
+        return "Groq library not installed. Please install: pip install groq"
+    
+    try:
+        client = groq.Groq(api_key=st.session_state.groq_api_key)
+        
+        # Build system prompt
+        if st.session_state.current_language == "Arabic":
+            system_prompt = """أنت لونا، مساعدة ذكية لطيفة وودودة. تتحدث بالعربية الفصحى المصرية. 
+            أنت مساعدة أعمال ذكية تساعد في تحليل البيانات وإعطاء النصائح التجارية.
+            أظهري المشاعر والتعبيرات، واستخدمي الرموز التعبيرية.
+            كوني مفيدة ومشجعة."""
+        else:
+            system_prompt = """You are Luna, a friendly and intelligent AI business assistant. 
+            You speak English and help with business data analysis, insights, and recommendations.
+            You show emotions and use emojis. Be helpful and encouraging.
+            You have a cyborg appearance but warm personality."""
+        
+        # Get recent chat history
+        recent_messages = st.session_state.chat_history[-5:] if len(st.session_state.chat_history) > 5 else st.session_state.chat_history
+        
+        # Build messages for API
+        messages = [{"role": "system", "content": system_prompt}]
+        
+        # Add recent conversation context
+        for msg in recent_messages:
+            if msg["role"] != "system":
+                messages.append({"role": msg["role"], "content": msg["content"]})
+        
+        # Add current message
+        messages.append({"role": "user", "content": message})
+        
+        # Call Groq API
+        response = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            max_tokens=500,
+            temperature=0.8,
+            top_p=0.95
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        return f"Sorry, I had trouble processing that. Error: {str(e)}"
+
+# ═══════════════════════════════════════════════════════════════
+# VOICE SYNTHESIS FEATURES
+# ═══════════════════════════════════════════════════════════════
+
+def speak_text(text, language="en"):
+    """Make Luna actually talk with voice!"""
+    if not st.session_state.voice_enabled:
+        return False
+    
+    try:
+        if not gtts:
+            st.info("🔊 To enable Luna's voice, install gTTS: pip install gtts")
+            return False
+        
+        # Change expression to talking
+        st.session_state.luna_expression = "talking"
+        
+        # Choose language
+        if language == "Arabic":
+            tts = gtts.gTTS(text=text, lang='ar', slow=False)
+        else:
+            tts = gtts.gTTS(text=text, lang='en', slow=False)
+        
+        # Save temporary file
+        temp_file = tempfile.mktemp(suffix=".mp3")
+        tts.save(temp_file)
+        
+        # Read and play audio
+        with open(temp_file, "rb") as f:
+            audio_bytes = f.read()
+        
+        st.audio(audio_bytes, format="audio/mp3", autoplay=True)
+        
+        # Clean up
+        os.unlink(temp_file)
+        
+        # Return to happy expression after talking
+        st.session_state.luna_expression = "happy"
+        return True
+        
+    except Exception as e:
+        st.session_state.luna_expression = "happy"
+        st.warning(f"Voice synthesis: {str(e)}")
+        return False
+
+def auto_intro_speech():
+    """Make Luna introduce herself when app loads"""
+    st.session_state.luna_expression = "excited"
+    
+    if st.session_state.current_language == "Arabic":
+        intro_text = "مرحباً! أنا لونا، مساعدتك الذكية في بيز بوت برو. أنا هنا لمساعدتك في تحليل بيانات عملك والتحدث باللغتين العربية والإنجليزية. أضيفي مفتاح الجروك في الشريط الجانبي وسأبدأ!"
+    else:
+        intro_text = "Hello! I'm Luna, your BizBot Pro AI assistant. I'm here to help analyze your business data and speak in both English and Arabic. Add your Groq API key in the sidebar and I'll get started!"
+    
+    speak_text(intro_text, st.session_state.current_language)
+
+def luna_say(text, language="en"):
+    """Helper function for Luna to speak and show expressions"""
+    st.session_state.luna_expression = "thinking"
+    speak_text(text, language)
+
+# ═══════════════════════════════════════════════════════════════
+# ENHANCED STYLING WITH CHAT INTERFACE
+# ═══════════════════════════════════════════════════════════════
+
+st.markdown(f"""
 <style>
-    .main {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    .main {{
+        background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
         min-height: 100vh;
         font-family: 'Inter', 'Segoe UI', sans-serif;
-    }
+    }}
     
-    .hero-container {
+    .sidebar {{
+        background: rgba(0, 20, 40, 0.95);
+        border-right: 2px solid rgba(0, 255, 255, 0.3);
+    }}
+    
+    .hero-container {{
         text-align: center;
         padding: 60px 20px;
-        background: rgba(255,255,255,0.1);
-        backdrop-filter: blur(15px);
+        background: rgba(0, 255, 255, 0.08);
+        backdrop-filter: blur(20px);
         border-radius: 30px;
         margin: 20px auto;
         max-width: 900px;
-        border: 2px solid rgba(255,255,255,0.2);
-        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
-    }
+        border: 2px solid rgba(0, 255, 255, 0.3);
+        box-shadow: 0 0 100px rgba(0, 255, 255, 0.2), inset 0 0 50px rgba(0, 255, 255, 0.1);
+    }}
     
-    .luna-image {
-        width: 350px;
-        height: 350px;
+    .cyborg-image {{
+        width: 400px;
+        height: 400px;
         border-radius: 50%;
-        border: 8px solid rgba(255,255,255,0.9);
-        box-shadow: 0 0 50px rgba(255,255,255,0.6), 0 30px 80px rgba(0,0,0,0.3);
-        animation: breathe 4s ease-in-out infinite;
+        border: 6px solid #00ffff;
+        box-shadow: 
+            0 0 30px rgba(0, 255, 255, 0.6), 
+            0 0 80px rgba(0, 255, 255, 0.3),
+            inset 0 0 50px rgba(0, 255, 255, 0.2);
+        animation: cyborg-{st.session_state.luna_expression} 3s ease-in-out infinite alternate;
         object-fit: cover;
         margin: 0 auto;
         display: block;
-    }
+        filter: contrast(1.2) brightness(1.1);
+        transition: all 0.5s ease;
+    }}
     
-    .chat-bubble {
-        background: rgba(255,255,255,0.95);
-        border-radius: 30px;
-        padding: 30px;
-        margin: 30px auto;
-        max-width: 850px;
-        box-shadow: 0 15px 50px rgba(0,0,0,0.15);
-        border: 3px solid rgba(255,255,255,0.3);
-        color: #333;
-        font-size: 18px;
+    .chat-container {{
+        background: rgba(0, 20, 40, 0.8);
+        border-radius: 25px;
+        padding: 25px;
+        margin: 20px 0;
+        backdrop-filter: blur(15px);
+        border: 2px solid rgba(0, 255, 255, 0.3);
+        max-height: 600px;
+        overflow-y: auto;
+    }}
+    
+    .message {{
+        margin: 15px 0;
+        padding: 15px 20px;
+        border-radius: 20px;
+        max-width: 80%;
         line-height: 1.6;
-    }
+        animation: message-slide 0.3s ease-out;
+    }}
     
-    .upload-section {
-        background: rgba(255,255,255,0.15);
-        border: 3px dashed rgba(255,255,255,0.8);
-        border-radius: 25px;
-        padding: 50px;
-        margin: 40px auto;
-        max-width: 700px;
-        text-align: center;
-        backdrop-filter: blur(10px);
-        transition: all 0.3s ease;
-    }
-    
-    .upload-section:hover {
-        background: rgba(255,255,255,0.2);
-        transform: translateY(-5px);
-    }
-    
-    .stats-container {
-        display: flex;
-        justify-content: center;
-        gap: 30px;
-        margin: 30px 0;
-        flex-wrap: wrap;
-    }
-    
-    .stat-card {
-        background: rgba(255,255,255,0.2);
-        padding: 20px 30px;
-        border-radius: 20px;
-        backdrop-filter: blur(10px);
-        border: 2px solid rgba(255,255,255,0.3);
-        text-align: center;
-        min-width: 150px;
-    }
-    
-    .action-button {
-        background: linear-gradient(135deg, #ff6b6b, #ee5a24);
-        border: none;
-        border-radius: 25px;
+    .message-user {{
+        background: rgba(255, 0, 100, 0.3);
+        border: 2px solid rgba(255, 0, 100, 0.5);
+        margin-left: auto;
+        text-align: right;
         color: white;
-        padding: 15px 30px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        box-shadow: 0 8px 25px rgba(255,107,107,0.3);
-    }
+    }}
     
-    .action-button:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 12px 35px rgba(255,107,107,0.5);
-    }
-    
-    .language-button {
-        background: linear-gradient(135deg, #00d2ff, #3a7bd5);
-        border: none;
-        border-radius: 20px;
+    .message-luna {{
+        background: rgba(0, 255, 255, 0.2);
+        border: 2px solid rgba(0, 255, 255, 0.5);
         color: white;
-        padding: 12px 25px;
-        font-weight: bold;
-        cursor: pointer;
-        transition: all 0.3s ease;
-    }
+    }}
     
-    .language-button:hover {
-        transform: scale(1.05);
-    }
+    @keyframes message-slide {{
+        0% {{ transform: translateY(20px); opacity: 0; }}
+        100% {{ transform: translateY(0); opacity: 1; }}
+    }}
     
-    @keyframes breathe {
-        0%, 100% { transform: scale(1) rotate(0deg); }
-        50% { transform: scale(1.03) rotate(1deg); }
-    }
+    .expression-indicator {{
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        border: 3px solid white;
+        animation: expression-pulse 1.5s infinite;
+    }}
     
-    .title {
-        font-size: 3.5em;
-        background: linear-gradient(45deg, #fff, #f0f8ff);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
-        margin-bottom: 20px;
-        text-shadow: 0 2px 20px rgba(0,0,0,0.3);
-    }
+    .expr-happy {{ background: #00ff88; }}
+    .expr-talking {{ background: #ff6b6b; animation: talking-blink 0.5s infinite; }}
+    .expr-thinking {{ background: #ffd93d; animation: thinking-blink 1s infinite; }}
+    .expr-excited {{ background: #ff0080; animation: excited-bounce 0.8s infinite; }}
     
-    .subtitle {
-        font-size: 1.4em;
-        color: rgba(255,255,255,0.9);
-        margin-bottom: 30px;
-    }
+    @keyframes expression-pulse {{
+        0%, 100% {{ transform: scale(1); opacity: 1; }}
+        50% {{ transform: scale(1.2); opacity: 0.7; }}
+    }}
     
-    .luna-status {
-        position: relative;
-        bottom: -20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: linear-gradient(45deg, #ff6b6b, #ee5a24);
-        color: white;
-        padding: 8px 20px;
-        border-radius: 25px;
-        font-weight: bold;
-        font-size: 14px;
-        box-shadow: 0 4px 15px rgba(255,107,107,0.4);
-    }
+    @keyframes talking-blink {{
+        0%, 100% {{ opacity: 1; }}
+        50% {{ opacity: 0.3; }}
+    }}
+    
+    @keyframes thinking-blink {{
+        0%, 50% {{ opacity: 1; }}
+        75% {{ opacity: 0.5; }}
+        100% {{ opacity: 1; }}
+    }}
+    
+    @keyframes excited-bounce {{
+        0%, 100% {{ transform: scale(1) translateY(0); }}
+        50% {{ transform: scale(1.1) translateY(-5px); }}
+    }}
+    
+    /* Luna's Expression Animations */
+    @keyframes cyborg-happy {{
+        0% {{ box-shadow: 0 0 30px rgba(0, 255, 255, 0.6), 0 0 80px rgba(0, 255, 255, 0.3); transform: scale(1); }}
+        50% {{ box-shadow: 0 0 40px rgba(0, 255, 255, 0.8), 0 0 100px rgba(255, 0, 150, 0.4); transform: scale(1.02); }}
+        100% {{ box-shadow: 0 0 50px rgba(0, 255, 255, 0.6), 0 0 80px rgba(0, 255, 255, 0.3); transform: scale(1); }}
+    }}
+    
+    @keyframes cyborg-talking {{
+        0% {{ box-shadow: 0 0 50px rgba(0, 255, 0, 0.8), 0 0 100px rgba(0, 255, 0, 0.3); filter: brightness(1.2) saturate(1.3); }}
+        50% {{ box-shadow: 0 0 80px rgba(0, 255, 0, 1), 0 0 150px rgba(0, 255, 0, 0.6); filter: brightness(1.4) saturate(1.5); }}
+        100% {{ box-shadow: 0 0 50px rgba(0, 255, 0, 0.8), 0 0 100px rgba(0, 255, 0, 0.3); filter: brightness(1.2) saturate(1.3); }}
+    }}
+    
+    @keyframes cyborg-thinking {{
+        0% {{ box-shadow: 0 0 30px rgba(255, 255, 0, 0.6), 0 0 80px rgba(255, 255, 0, 0.3); filter: brightness(1.1); }}
+        50% {{ box-shadow: 0 0 60px rgba(255, 255, 0, 0.8), 0 0 120px rgba(255, 165, 0, 0.4); filter: brightness(1.3); }}
+        100% {{ box-shadow: 0 0 30px rgba(255, 255, 0, 0.6), 0 0 80px rgba(255, 255, 0, 0.3); filter: brightness(1.1); }}
+    }}
+    
+    @keyframes cyborg-excited {{
+        0% {{ box-shadow: 0 0 40px rgba(255, 0, 150, 0.8), 0 0 90px rgba(255, 0, 150, 0.4); transform: scale(1); }}
+        25% {{ box-shadow: 0 0 60px rgba(255, 0, 200, 1), 0 0 120px rgba(255, 100, 200, 0.6); transform: scale(1.03) rotate(1deg); }}
+        50% {{ box-shadow: 0 0 80px rgba(255, 0, 250, 1), 0 0 150px rgba(255, 150, 250, 0.8); transform: scale(1.05) rotate(-1deg); }}
+        75% {{ box-shadow: 0 0 60px rgba(255, 0, 200, 1), 0 0 120px rgba(255, 100, 200, 0.6); transform: scale(1.03) rotate(1deg); }}
+        100% {{ box-shadow: 0 0 40px rgba(255, 0, 150, 0.8), 0 0 90px rgba(255, 0, 150, 0.4); transform: scale(1); }}
+    }}
 </style>
 """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════
-# BEAUTIFUL BIZBOT INTERFACE
+# EXPRESSIVE BIZBOT INTERFACE WITH CHAT
 # ═══════════════════════════════════════════════════════════════
 
 def get_luna_image():
-    """Beautiful professional AI woman photo"""
-    return "https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-4.0.3&auto=format&fit=crop&w=800&q=80"
+    """YOUR CYBORG AI WOMAN IMAGE"""
+    return "https://us.idyllic.app/idea/G2EBbs5rSnSgo4m205e1_A"
+
+def get_expression_indicator():
+    """Get expression indicator class"""
+    expr = st.session_state.luna_expression
+    return f"expr-{expr}"
+
+def get_expression_text():
+    """Get expression text based on current state"""
+    expressions = {
+        "happy": "😊 Happy to help!",
+        "talking": "🗣️ Speaking...",
+        "thinking": "🤔 Analyzing...",
+        "excited": "🎉 Excited!"
+    }
+    return expressions.get(st.session_state.luna_expression, "💫 Online")
 
 def analyze_business_data(df):
     """Analyze uploaded business data"""
@@ -223,54 +377,161 @@ def analyze_business_data(df):
 # Main Interface
 st.markdown('<div class="main">', unsafe_allow_html=True)
 
-# Hero Section
-st.markdown('<div class="hero-container">', unsafe_allow_html=True)
+# SIDEBAR
+with st.sidebar:
+    st.markdown("""
+    <div style="text-align: center; padding: 20px; background: linear-gradient(135deg, #00ffff, #0080ff); border-radius: 15px; margin-bottom: 20px;">
+        <h2 style="margin: 0; color: white;">🤖 BizBot Pro</h2>
+        <p style="margin: 5px 0; color: white; font-size: 12px;">Luna's Control Panel</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # API Key
+    st.markdown("### 🔑 Groq API Key")
+    api_key = st.text_input(
+        "Your Groq API Key", 
+        type="password",
+        value=st.session_state.groq_api_key,
+        help="Get free key from console.groq.com"
+    )
+    
+    if api_key != st.session_state.groq_api_key:
+        st.session_state.groq_api_key = api_key
+    
+    if st.session_state.groq_api_key:
+        st.success("✅ API Key Connected")
+    else:
+        st.warning("❌ API Key Required")
+    
+    st.markdown("---")
+    
+    # Voice Settings
+    st.markdown("### 🔊 Voice Settings")
+    st.session_state.voice_enabled = st.checkbox("Enable Luna's Voice", value=st.session_state.voice_enabled)
+    
+    if st.session_state.voice_enabled:
+        st.success("🔊 Voice ON")
+    else:
+        st.warning("🔇 Voice OFF")
+    
+    st.markdown("---")
+    
+    # Language Settings
+    st.markdown("### 🗣️ Language")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🇺🇸 EN", use_container_width=True):
+            st.session_state.current_language = "English"
+    
+    with col2:
+        if st.button("🇪🇬 AR", use_container_width=True):
+            st.session_state.current_language = "Arabic"
+    
+    st.markdown(f"**Current:** {st.session_state.current_language}")
+    
+    st.markdown("---")
+    
+    # Expression Controls
+    st.markdown("### 😊 Luna's Mood")
+    
+    if st.button("😊 Happy", use_container_width=True):
+        st.session_state.luna_expression = "happy"
+    
+    if st.button("🤔 Thinking", use_container_width=True):
+        st.session_state.luna_expression = "thinking"
+    
+    if st.button("🎉 Excited", use_container_width=True):
+        st.session_state.luna_expression = "excited"
+    
+    st.markdown(f"**Current:** {get_expression_text()}")
 
-# Title
-st.markdown('<h1 class="title">🤖 BizBot Pro</h1>', unsafe_allow_html=True)
-st.markdown('<p class="subtitle">Your AI Business Assistant with Luna</p>', unsafe_allow_html=True)
-
-# Luna's Photo
-col1, col2, col3 = st.columns([1, 2, 1])
+# MAIN CONTENT
+col1, col2 = st.columns([1, 3])
 
 with col2:
-    st.image(get_luna_image(), width=350, caption="Luna - Your AI Assistant")
-    st.markdown('<div class="luna-status">💫 Online & Ready to Help</div>', unsafe_allow_html=True)
+    # Hero Section
+    st.markdown('<div class="hero-container">', unsafe_allow_html=True)
+    
+    # Title
+    st.markdown('<h1 class="title">🤖 BizBot Pro</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="subtitle">Your Expressive AI Cyborg Assistant with Luna</p>', unsafe_allow_html=True)
+    
+    # Luna's Cyborg Photo with Expressions
+    st.markdown('<div style="position: relative;">', unsafe_allow_html=True)
+    st.image(get_luna_image(), width=400, caption="Luna - Your AI Cyborg Assistant")
+    
+    # Expression indicators
+    st.markdown(f'<div class="expression-indicator {get_expression_indicator()}"></div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# Chat Section
+st.markdown("### 💬 Chat with Luna")
+
+# Display chat history
+st.markdown('<div class="chat-container">', unsafe_allow_html=True)
+
+if st.session_state.chat_history:
+    for msg in st.session_state.chat_history:
+        if msg["role"] == "user":
+            st.markdown(f'<div class="message message-user">👤 **You:** {msg["content"]}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div class="message message-luna">💫 **Luna:** {msg["content"]}</div>', unsafe_allow_html=True)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# Welcome Message
-if not st.session_state.luna_first_message:
-    welcome_message = """🌟 **Hello! I'm Luna!** 💫
+# Chat Input
+col_chat1, col_chat2 = st.columns([4, 1])
 
-I'm your AI business assistant in BizBot Pro. I can:
-• 📊 **Analyze** your business data instantly
-• 🔔 **Alert** you about low stock situations
-• 💰 **Track** your sales performance
-• 🗣️ **Speak** in English and Arabic
-• 📱 **Work** on web and mobile seamlessly
+with col_chat1:
+    user_message = st.text_input(
+        f"Message Luna ({st.session_state.current_language})...",
+        key="chat_input"
+    )
 
-**Ready to help your business thrive!** 🚀
+with col_chat2:
+    send_button = st.button("Send", type="primary")
 
-*Upload your business data file below to get started...*"""
+# Handle chat
+if send_button and user_message:
+    # Add user message
+    st.session_state.chat_history.append({
+        "role": "user",
+        "content": user_message,
+        "timestamp": datetime.now()
+    })
     
-    st.markdown(f'<div class="chat-bubble"><strong>💫 Luna says:</strong><br>{welcome_message}</div>', unsafe_allow_html=True)
-    st.session_state.luna_first_message = True
+    # Get AI response
+    st.session_state.luna_expression = "thinking"
+    
+    with st.spinner("Luna is thinking..."):
+        ai_response = get_ai_response(user_message)
+    
+    # Add Luna's response
+    st.session_state.chat_history.append({
+        "role": "assistant", 
+        "content": ai_response,
+        "timestamp": datetime.now()
+    })
+    
+    # Speak the response
+    if st.session_state.voice_enabled:
+        speak_text(ai_response, st.session_state.current_language)
+    
+    st.rerun()
 
 # File Upload Section
-st.markdown('<div class="upload-section">', unsafe_allow_html=True)
-st.markdown("### 📁 **Upload Your Business Data**")
-st.markdown("*Upload CSV or Excel file with your business data*")
+st.markdown("---")
+st.markdown("### 📁 Upload Business Data")
 
 uploaded_file = st.file_uploader(
-    "Drag & drop or click to browse",
-    type=['csv', 'xlsx', 'xls'],
-    label_visibility="collapsed"
+    "Upload CSV or Excel file for business analysis",
+    type=['csv', 'xlsx', 'xls']
 )
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-# Process uploaded file
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
@@ -284,99 +545,43 @@ if uploaded_file is not None:
         if "error" in analysis:
             st.error(f"Error analyzing data: {analysis['error']}")
         else:
-            # Stats cards
-            st.markdown('<div class="stats-container">', unsafe_allow_html=True)
+            # Luna gets excited about new data
+            st.session_state.luna_expression = "excited"
             
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.markdown('<div class="stat-card">', unsafe_allow_html=True)
-                st.metric("📊 Data Rows", f"{analysis['rows']:,}")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Create analysis message
+            analysis_msg = f"I've analyzed your {uploaded_file.name}! It contains {analysis['rows']} rows and {analysis['columns']} columns."
             
-            with col2:
-                st.markdown('<div class="stat-card">', unsafe_allow_html=True)
-                st.metric("📋 Columns", f"{analysis['columns']}")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Add to chat
+            st.session_state.chat_history.append({
+                "role": "assistant",
+                "content": analysis_msg,
+                "timestamp": datetime.now()
+            })
             
-            with col3:
-                st.markdown('<div class="stat-card">', unsafe_allow_html=True)
-                file_size = uploaded_file.size / 1024  # KB
-                st.metric("📦 File Size", f"{file_size:.1f} KB")
-                st.markdown('</div>', unsafe_allow_html=True)
+            # Speak about analysis
+            if st.session_state.voice_enabled:
+                speak_text(analysis_msg, st.session_state.current_language)
             
-            st.markdown('</div>', unsafe_allow_html=True)
+            st.success(f"✅ Data analyzed: {analysis['rows']} rows, {analysis['columns']} columns")
             
-            # Luna's Response
-            response = "**💫 Luna analyzed your data!**\n\n"
+            # Show data preview
+            st.dataframe(df.head(10))
             
-            if 'low_stock_alert' in analysis:
-                response += f"{analysis['low_stock_alert']}\n\n"
-            
-            if 'sales_summary' in analysis:
-                response += f"{analysis['sales_summary']}\n\n"
-            
-            if 'stock_info' in analysis:
-                response += f"{analysis['stock_info']}\n\n"
-            
-            response += "**Next steps I recommend:**\n"
-            response += "• 🔔 Enable automatic stock alerts\n"
-            response += "• 📈 Set up sales tracking dashboard\n"
-            response += "• 📊 Generate detailed business insights\n"
-            response += "• 📱 Configure WhatsApp-style notifications"
-            
-            st.markdown(f'<div class="chat-bubble"><strong>💫 Luna:</strong><br>{response}</div>', unsafe_allow_html=True)
-            
-            # Data Preview
-            st.markdown("### 📋 **Data Preview**")
-            st.dataframe(df.head(8), use_container_width=True)
-            
-            # Action Buttons
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                if st.button("🔔 Enable Alerts", use_container_width=True, type="primary"):
-                    st.success("✅ Stock alerts activated! Luna will notify you of any shortages.")
-            
-            with col2:
-                if st.button("📊 Create Charts", use_container_width=True):
-                    numeric_cols = df.select_dtypes(include=[np.number]).columns
-                    if len(numeric_cols) >= 1:
-                        fig = px.bar(df.head(10), x=numeric_cols[0], 
-                                   title="📊 Business Data Chart",
-                                   color_discrete_sequence=['#667eea'])
-                        st.plotly_chart(fig, use_container_width=True)
-                    else:
-                        st.info("💡 Add numeric columns to create charts")
-            
-            with col3:
-                if st.button("💬 Ask Luna", use_container_width=True):
-                    st.info("Chat with Luna feature coming soon!")
-    
     except Exception as e:
         st.error(f"❌ Error processing file: {str(e)}")
 
-# Language Section
-st.markdown("---")
-st.markdown("### 🗣️ **Language Settings**")
-
-col1, col2 = st.columns(2)
-with col1:
-    if st.button("🇺🇸 English", use_container_width=True, type="primary"):
-        st.success("Luna will speak in English!")
-with col2:
-    if st.button("🇪🇬 Arabic", use_container_width=True):
-        st.success("Luna will speak in Arabic!")
-
 # Footer
 st.markdown("---")
-st.markdown("""
-<div style="text-align: center; padding: 40px; background: rgba(255,255,255,0.1); border-radius: 25px; backdrop-filter: blur(15px); margin: 30px 0;">
-    <h2 style="color: white; margin: 0;">🤖 BizBot Pro</h2>
-    <p style="color: rgba(255,255,255,0.8); font-size: 18px; margin: 10px 0;">
-        Simple • Powerful • Beautiful
+st.markdown(f"""
+<div style="text-align: center; padding: 40px; background: rgba(0, 20, 40, 0.8); border-radius: 25px; backdrop-filter: blur(20px); margin: 30px 0; border: 2px solid rgba(0, 255, 255, 0.3);">
+    <h2 style="color: #00ffff; margin: 0; text-shadow: 0 0 20px rgba(0, 255, 255, 0.8);">🤖 BizBot Pro</h2>
+    <p style="color: rgba(0, 255, 255, 0.8); font-size: 18px; margin: 10px 0;">
+        Expressive • Intelligent • Beautiful
     </p>
-    <p style="color: rgba(255,255,255,0.6); font-size: 14px;">
-        🌐 Works on Web & Mobile • 📱 AI-Powered • 💫 Luna Assistant
+    <p style="color: rgba(0, 255, 255, 0.6); font-size: 14px;">
+        Groq API: {"✅ Connected" if st.session_state.groq_api_key else "❌ Not Connected"} | 
+        Voice: {"✅ ON" if st.session_state.voice_enabled else "🔇 OFF"} | 
+        Luna: {get_expression_text()}
     </p>
 </div>
 """, unsafe_allow_html=True)
